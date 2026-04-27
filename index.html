@@ -286,6 +286,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
   <div class="sidebar-left" id="sidebarLeft">
     <div class="panel-header">Responders <span class="badge badge-blue" id="responderCount">0</span></div>
     <div class="panel-body" id="responderList"></div>
+    <div class="panel-header" style="margin-top:10px">Emergency Contacts</div>
+    <div class="panel-body" style="display:flex;flex-direction:column;gap:8px">
+      <a href="tel:112" class="btn-outline" style="text-decoration:none;text-align:center;color:var(--red);border-color:var(--red);font-weight:bold;display:block">National Emergency: 112</a>
+      <a href="tel:108" class="btn-outline" style="text-decoration:none;text-align:center;display:block">Ambulance: 108</a>
+      <a href="tel:100" class="btn-outline" style="text-decoration:none;text-align:center;display:block">Police: 100</a>
+      <a href="tel:101" class="btn-outline" style="text-decoration:none;text-align:center;display:block">Fire: 101</a>
+      <a href="tel:01124363260" class="btn-outline" style="text-decoration:none;text-align:center;display:block">NDRF HQ: 011-2436-3260</a>
+    </div>
   </div>
 
   <!-- Center: Map -->
@@ -552,11 +560,12 @@ for(const i of assigned){
 }
 
 /* --- Live Location Tracking --- */
-let watchId=null;let userMarker=null;
+let watchId=null;let userMarker=null;let walkSimInterval=null;
 function toggleLocationTracking(){
   const btn=document.getElementById('locateBtn');
   if(watchId!==null){
     navigator.geolocation.clearWatch(watchId);watchId=null;
+    if(walkSimInterval){clearInterval(walkSimInterval);walkSimInterval=null;}
     if(userMarker)map.removeLayer(userMarker);userMarker=null;
     btn.classList.remove('active');showToast('Live tracking disabled');
   }else{
@@ -568,6 +577,13 @@ function toggleLocationTracking(){
         const icon=L.divIcon({className:'',html:'<div class="user-location-pulse"></div>',iconSize:[14,14],iconAnchor:[7,7]});
         userMarker=L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map);
         map.setView([lat,lng],14);
+        if(!walkSimInterval){
+          walkSimInterval=setInterval(()=>{
+            if(!userMarker)return;
+            const cur=userMarker.getLatLng();
+            userMarker.setLatLng([cur.lat+(Math.random()-0.5)*0.0002,cur.lng+(Math.random()-0.5)*0.0002]);
+          },2000);
+        }
       }else{userMarker.setLatLng([lat,lng])}
     },e=>{console.warn(e);showToast('Tracking error')},{enableHighAccuracy:true,maximumAge:10000})
   }
@@ -730,14 +746,28 @@ function updateCharCount(){document.getElementById('charCount').textContent=docu
 let cfLat=12.9716,cfLng=77.5946;
 function useGPS(){if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{cfLat=p.coords.latitude;cfLng=p.coords.longitude;document.getElementById('cfLocation').value=cfLat.toFixed(4)+', '+cfLng.toFixed(4);showToast('GPS location acquired')},()=>showToast('GPS failed — using default'))}else showToast('GPS not available')}
 
+function showSuccessModal(id, title){
+  let m=document.getElementById('successModal');
+  if(!m){
+    m=document.createElement('div');m.id='successModal';
+    m.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2);z-index:10000;text-align:center;width:90%;max-width:320px;';
+    const ov=document.createElement('div');ov.id='successOverlay';
+    ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;';
+    document.body.appendChild(ov);document.body.appendChild(m);
+  }
+  m.innerHTML=`<div style="font-size:40px;color:var(--green);margin-bottom:10px">✅</div><h3 style="margin:0 0 10px 0">${title}</h3><div style="background:var(--bg3);padding:10px;border-radius:8px;font-family:monospace;font-size:16px;margin-bottom:20px;font-weight:bold">${id}</div><div style="display:flex;flex-direction:column;gap:10px"><button class="btn-primary" onclick="navigator.clipboard.writeText('${id}').then(()=>showToast('Copied!'))">Copy Request ID</button><a href="sms:?body=I need help. My RespondIQ ID: ${id}" class="btn-outline" style="text-decoration:none;display:block">Share via SMS</a><button class="btn-outline" style="border:none" onclick="document.getElementById('successModal').remove();document.getElementById('successOverlay').remove()">Close</button></div>`;
+}
+
 async function submitCitizenForm(){
 const name=document.getElementById('cfName').value.trim();const desc=document.getElementById('cfDesc').value.trim();const type=document.getElementById('cfType').value;
 if(!name||!desc){showToast('Please fill required fields');return}
 const result=classifyMessage(desc);
-const inc={id:'INC-'+Date.now(),type:result.type,severity:result.severity,message:desc,citizenName:name,phone:document.getElementById('cfPhone').value,lat:cfLat+(Math.random()-.5)*.01,lng:cfLng+(Math.random()-.5)*.01,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'};
+const inc={id:'CIT-'+Date.now(),type:result.type,severity:result.severity,message:desc,citizenName:name,phone:document.getElementById('cfPhone').value,lat:cfLat+(Math.random()-.5)*.01,lng:cfLng+(Math.random()-.5)*.01,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'};
 await saveIncident(inc);
-if(!isOnline){await addToOutbox({type:'citizen_request',payload:inc,timestamp:Date.now()});showToast('Request queued — will sync when connected. ID: '+inc.id)}
-else showToast('Request received — ID: '+inc.id);
+if(!isOnline){await addToOutbox({type:'citizen_request',payload:inc,timestamp:Date.now()})}
+showSuccessModal(inc.id, 'Request Submitted');
+document.getElementById('cfName').value='';document.getElementById('cfDesc').value='';document.getElementById('charCount').textContent='0';
+
 addTriageEntry(desc,result);addLogEntry('manual','Citizen request from '+name+': '+inc.id);
 addIncidentMarker(inc);await refreshUI();
 document.getElementById('cfName').value='';document.getElementById('cfPhone').value='';document.getElementById('cfDesc').value='';document.getElementById('cfType').value='';document.getElementById('charCount').textContent='0'}
@@ -898,12 +928,7 @@ async function triggerSOS(type){
   await saveIncident(inc);
   if(!isOnline){
     await addToOutbox({type:'citizen_request',payload:inc,timestamp:Date.now()});
-    showToast(`CRITICAL: SOS Queued offline. ID: ${inc.id}`);
-    
-    // Switch to Chat Tab if on Mobile
     if(window.innerWidth<=768){switchTab('chat');}
-    
-    // Broadcast to Mesh Chat
     const chatPanel=document.getElementById('meshChatPanel');
     if(chatPanel&&!chatPanel.classList.contains('open')){
       chatPanel.previousElementSibling.classList.add('open');
@@ -912,13 +937,11 @@ async function triggerSOS(type){
     }
     const meshMsg=`URGENT SOS (${type}) transmitted to nodes within 50m radius.`;
     appendMeshMessage(meshMsg,'sent');
-    
     setTimeout(()=>{
         appendMeshMessage(`SOS relay received and forwarded by Node ${String.fromCharCode(65+Math.floor(Math.random()*26))}. Help is on the way.`,'received','System');
     },2000);
-  }else{
-    showToast(`SOS Sent directly to ${type} dispatch. ID: ${inc.id}`);
   }
+  showSuccessModal(inc.id, 'Emergency SOS Queued');
   addLogEntry('manual',`Emergency SOS triggered: ${type}`);
   addIncidentMarker(inc);
   await refreshUI();
