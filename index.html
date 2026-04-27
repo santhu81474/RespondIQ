@@ -7,6 +7,10 @@
 <title>RespondIQ — Disaster Coordination</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3b82f6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="RespondIQ">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text y='65' font-size='50' x='22' fill='white' font-weight='bold'>RQ</text></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -153,20 +157,59 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
 
 /* Mobile responsive */
 @media(max-width:768px){
-  .main{flex-direction:column}
-  .sidebar-left,.sidebar-right{width:100%;height:auto;border:none;display:none}
-  .sidebar-left.active,.sidebar-right.active{display:flex}
-  .map-container{height:45vh;flex:none}
+  .main{flex-direction:column;height:calc(100vh - 48px - 80px)}
+  .main.has-banner{height:calc(100vh - 48px - 33px - 80px)}
+  .sidebar-left,.sidebar-right{width:100%;height:auto;border:none;display:none;overflow-y:auto;max-height:calc(100vh - 48px - 80px - 42px)}
+  .sidebar-left.active,.sidebar-right.active{display:flex;flex:1}
+  .map-container{height:100%;flex:1;display:none}
   .map-container.active{display:block}
   .mobile-tabs{display:flex}
   .stats-bar{grid-template-columns:repeat(2,1fr);gap:6px;padding:6px 10px}
-  .stat-card .value{font-size:18px}
+  .stat-card{padding:8px}
+  .stat-card .value{font-size:16px}
+  .stat-card .label{font-size:10px}
   .topbar h1{font-size:15px}
+  .topbar-right{gap:6px}
+  .topbar-right .btn-sm{padding:4px 8px;font-size:11px}
+  #clock{font-size:12px}
+  .panel-body{padding:6px}
+  .incident-card{padding:8px}
+  .responder-card{padding:6px 8px}
+  .citizen-form{padding:8px}
+  .citizen-form .form-group{margin-bottom:6px}
+  .popup-btn{padding:8px;font-size:13px}
+  .leaflet-popup-content-wrapper{max-width:280px!important}
 }
 @media(max-width:480px){
-  .stats-bar{grid-template-columns:repeat(2,1fr)}
-  .topbar{padding:8px 10px;gap:8px}
+  .stats-bar{grid-template-columns:repeat(2,1fr);gap:4px;padding:4px 8px}
+  .stat-card{padding:6px}
+  .stat-card .value{font-size:14px}
+  .topbar{padding:6px 8px;gap:6px;height:44px}
+  .topbar h1{font-size:14px}
+  .topbar-right .btn-sm{padding:3px 6px;font-size:10px}
+  .badge{font-size:10px;padding:1px 6px}
+  #clock{display:none}
 }
+/* Standalone mode (installed PWA) — hide browser chrome hints */
+@media(display-mode:standalone){
+  .topbar{padding-top:env(safe-area-inset-top,0)}
+}
+
+/* Install banner */
+.install-banner{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);padding:14px 16px;z-index:10000;box-shadow:0 -4px 16px rgba(0,0,0,.1);animation:slideUp .3s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.install-banner.show{display:flex;align-items:center;gap:12px}
+.install-banner-icon{width:44px;height:44px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;flex-shrink:0}
+.install-banner-text{flex:1;min-width:0}
+.install-banner-title{font-size:14px;font-weight:700;color:var(--text)}
+.install-banner-desc{font-size:12px;color:var(--text2);margin-top:2px}
+.install-banner-actions{display:flex;gap:8px;flex-shrink:0}
+.install-banner .btn-dismiss{background:none;color:var(--text2);padding:6px 10px;font-size:13px}
+
+/* Floating install button */
+.fab-install{display:none;position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:20px;box-shadow:0 4px 12px rgba(59,130,246,.4);z-index:9998;cursor:pointer;transition:all .2s;align-items:center;justify-content:center}
+.fab-install:hover{transform:scale(1.1);box-shadow:0 6px 16px rgba(59,130,246,.5)}
+.fab-install.show{display:flex}
 </style>
 </head>
 <body>
