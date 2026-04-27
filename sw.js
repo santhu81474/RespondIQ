@@ -1,6 +1,6 @@
 /* ===== RespondIQ Service Worker ===== */
 
-const CACHE_NAME = 'respondiq-v3';
+const CACHE_NAME = 'respondiq-v4';
 
 const APP_SHELL = [
   '/',

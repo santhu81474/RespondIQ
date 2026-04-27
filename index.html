@@ -210,6 +210,22 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
 .fab-install{display:none;position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:20px;box-shadow:0 4px 12px rgba(59,130,246,.4);z-index:9998;cursor:pointer;transition:all .2s;align-items:center;justify-content:center}
 .fab-install:hover{transform:scale(1.1);box-shadow:0 6px 16px rgba(59,130,246,.5)}
 .fab-install.show{display:flex}
+/* Bluetooth Mesh Chat */
+.mesh-panel{padding:8px;background:#fff;border-top:1px solid var(--border)}
+.mesh-controls{display:flex;gap:6px;margin-bottom:8px;align-items:center}
+.mesh-status{font-size:11px;font-weight:600;color:var(--text2);flex:1}
+.mesh-device-list{max-height:80px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;font-size:12px;background:var(--bg3)}
+.mesh-device{padding:4px 8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.mesh-device:last-child{border-bottom:none}
+.mesh-device .distance{color:var(--blue);font-weight:600}
+.mesh-chat-window{height:150px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.mesh-msg{max-width:85%;padding:6px 10px;border-radius:12px;font-size:12px;line-height:1.3;position:relative}
+.mesh-msg.sent{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.mesh-msg.received{background:#fff;border:1px solid var(--border);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+.mesh-msg-meta{font-size:9px;opacity:0.8;margin-top:2px;text-align:right;display:block}
+.mesh-msg.received .mesh-msg-meta{color:var(--text2);text-align:left}
+.mesh-input-row{display:flex;gap:6px}
+.mesh-input-row input{flex:1}
 </style>
 </head>
 <body>
@@ -242,6 +258,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
 <div class="mobile-tabs" id="mobileTabs">
   <button class="active" onclick="switchTab('map')">Map</button>
   <button onclick="switchTab('incidents')">Incidents</button>
+  <button onclick="switchTab('chat')">Chat</button>
   <button onclick="switchTab('resources')">Resources</button>
 </div>
 
@@ -278,7 +295,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
     <div class="panel-body panel-section" id="eventLog" style="max-height:180px"></div>
 
     <!-- Citizen Request Form -->
-    <button class="collapsible-toggle" onclick="toggleCollapsible(this)">Citizen Request Form <span class="arrow">v</span></button>
+    <button class="collapsible-toggle" onclick="toggleCollapsible(this, 'citizenFormPanel')">Citizen Request Form <span class="arrow">v</span></button>
     <div class="collapsible-body" id="citizenFormPanel">
       <div class="citizen-form">
         <div class="form-group"><label>Name *</label><input type="text" id="cfName" required placeholder="Full name"></div>
@@ -303,6 +320,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
         </div>
         <div class="form-group"><label>Description *</label><textarea id="cfDesc" maxlength="280" placeholder="Describe the situation..." oninput="updateCharCount()"></textarea><div class="char-counter"><span id="charCount">0</span>/280</div></div>
         <button class="btn-primary" style="width:100%" onclick="submitCitizenForm()">Submit Request</button>
+      </div>
+    </div>
+
+    <!-- Bluetooth Mesh Chat -->
+    <button class="collapsible-toggle" onclick="toggleCollapsible(this, 'meshChatPanel')">Bluetooth Mesh Chat <span class="arrow">v</span></button>
+    <div class="collapsible-body" id="meshChatPanel">
+      <div class="mesh-panel">
+        <div class="mesh-controls">
+          <button class="btn-outline btn-sm" onclick="meshScan()" id="btnMeshScan">Scan Devices</button>
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="meshRoutingToggle" onchange="toggleMeshRouting()"> Mesh Routing</label>
+        </div>
+        <div class="mesh-status" id="meshStatus">0 nearby nodes found</div>
+        <div class="mesh-device-list" id="meshDeviceList" style="display:none"></div>
+        <div class="mesh-chat-window" id="meshChatWindow">
+          <div style="font-size:11px;color:var(--text2);text-align:center;margin:auto">Connect to peers to chat offline</div>
+        </div>
+        <div class="mesh-input-row">
+          <input type="text" id="meshInput" placeholder="Message nearby peers..." disabled onkeypress="if(event.key==='Enter')sendMeshMessage()">
+          <button class="btn-primary btn-sm" id="btnMeshSend" disabled onclick="sendMeshMessage()">Send</button>
+        </div>
       </div>
     </div>
   </div>
@@ -578,16 +615,23 @@ window.addEventListener('offline',()=>setOnlineStatus(false));
 
 /* --- Mobile Tabs --- */
 function switchTab(tab){
-document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.remove('active'));
+const btns=document.querySelectorAll('.mobile-tabs button');
+btns.forEach(b=>b.classList.remove('active'));
 document.getElementById('mapContainer').classList.remove('active');
 document.getElementById('sidebarLeft').classList.remove('active');
 document.getElementById('sidebarRight').classList.remove('active');
-if(tab==='map'){document.getElementById('mapContainer').classList.add('active');document.querySelectorAll('.mobile-tabs button')[0].classList.add('active');setTimeout(()=>map.invalidateSize(),100)}
-else if(tab==='resources'){document.getElementById('sidebarLeft').classList.add('active');document.querySelectorAll('.mobile-tabs button')[2].classList.add('active')}
-else{document.getElementById('sidebarRight').classList.add('active');document.querySelectorAll('.mobile-tabs button')[1].classList.add('active')}}
+if(tab==='map'){document.getElementById('mapContainer').classList.add('active');btns[0].classList.add('active');setTimeout(()=>map.invalidateSize(),100)}
+else if(tab==='resources'){document.getElementById('sidebarLeft').classList.add('active');btns[3].classList.add('active')}
+else if(tab==='chat'){
+  document.getElementById('sidebarRight').classList.add('active');btns[2].classList.add('active');
+  const chatPanel=document.getElementById('meshChatPanel');
+  if(!chatPanel.classList.contains('open')){chatPanel.previousElementSibling.classList.add('open');chatPanel.classList.add('open')}
+  setTimeout(()=>chatPanel.scrollIntoView({behavior:'smooth'}), 50);
+}
+else{document.getElementById('sidebarRight').classList.add('active');btns[1].classList.add('active')}}
 
 /* --- Collapsible --- */
-function toggleCollapsible(btn){btn.classList.toggle('open');document.getElementById('citizenFormPanel').classList.toggle('open')}
+function toggleCollapsible(btn, targetId){btn.classList.toggle('open');document.getElementById(targetId).classList.toggle('open')}
 
 /* --- Citizen Form --- */
 function updateCharCount(){document.getElementById('charCount').textContent=document.getElementById('cfDesc').value.length}
@@ -638,6 +682,63 @@ triggerOffline:()=>{setOnlineStatus(false);addLogEntry('system','Network failure
 triggerOnline:()=>{setOnlineStatus(true);addLogEntry('system','Network restored');flushOutbox(i=>{console.log('synced:',JSON.stringify(i));return Promise.resolve()}).then(c=>showToast('Connected — '+c+' queued updates synced'))},
 autoAssign:async(id)=>assignNearestResponder(id)};
 startSimulation(app)}
+
+/* --- Bluetooth Mesh Chat Simulation --- */
+let meshNodes=[];let isScanning=false;let meshRouting=false;
+
+function toggleMeshRouting(){
+  meshRouting=document.getElementById('meshRoutingToggle').checked;
+  if(meshNodes.length>0){
+    showToast(meshRouting?'Mesh routing enabled — expanding radius':'Mesh routing disabled — local radius only');
+    if(meshRouting&&Math.random()>0.5){
+      setTimeout(()=>{addMeshNode('Node '+String.fromCharCode(65+Math.floor(Math.random()*26)),Math.floor(Math.random()*800+200)+'m (via mesh)')},1500)}
+  }
+}
+
+function meshScan(){
+  const btn=document.getElementById('btnMeshScan');const list=document.getElementById('meshDeviceList');
+  const status=document.getElementById('meshStatus');const input=document.getElementById('meshInput');
+  const sendBtn=document.getElementById('btnMeshSend');
+  if(isScanning)return;
+  isScanning=true;btn.textContent='Scanning...';btn.disabled=true;status.textContent='Searching for nearby peers...';
+  setTimeout(()=>{
+    isScanning=false;btn.textContent='Rescan';btn.disabled=false;list.style.display='block';
+    list.innerHTML='';meshNodes=[];
+    const count=Math.floor(Math.random()*3)+1;
+    for(let i=0;i<count;i++){addMeshNode('Node '+String.fromCharCode(65+Math.floor(Math.random()*26)),Math.floor(Math.random()*50+10)+'m')}
+    input.disabled=false;sendBtn.disabled=false;document.getElementById('meshChatWindow').innerHTML='';
+  },2000);
+}
+
+function addMeshNode(name,distance){
+  meshNodes.push({name,distance});
+  const list=document.getElementById('meshDeviceList');
+  const el=document.createElement('div');el.className='mesh-device';
+  el.innerHTML=`<span>${name}</span><span class="distance">${distance}</span>`;
+  list.appendChild(el);
+  document.getElementById('meshStatus').textContent=`${meshNodes.length} nearby node(s) connected`;
+}
+
+function sendMeshMessage(){
+  const input=document.getElementById('meshInput');const text=input.value.trim();
+  if(!text||meshNodes.length===0)return;
+  appendMeshMessage(text,'sent');input.value='';
+  setTimeout(()=>{
+    const replies=['Copy that.','Understood.','We are safe here.','Need medical supplies.','Water level rising.','Received your message.'];
+    const reply=replies[Math.floor(Math.random()*replies.length)];
+    const node=meshNodes[Math.floor(Math.random()*meshNodes.length)].name;
+    appendMeshMessage(reply,'received',node);
+  },Math.floor(Math.random()*3000)+1000);
+}
+
+function appendMeshMessage(text,type,sender='You'){
+  const win=document.getElementById('meshChatWindow');
+  const el=document.createElement('div');el.className=`mesh-msg ${type}`;
+  const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  el.innerHTML=`${text}<span class="mesh-msg-meta">${sender} • ${time}</span>`;
+  win.appendChild(el);win.scrollTop=win.scrollHeight;
+  while(win.children.length>50)win.removeChild(win.firstChild);
+}
 
 /* --- Service Worker Registration --- */
 if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').then(r=>{console.log('SW registered:',r.scope);
