@@ -640,7 +640,50 @@ autoAssign:async(id)=>assignNearestResponder(id)};
 startSimulation(app)}
 
 /* --- Service Worker Registration --- */
-if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').then(r=>console.log('SW registered:',r.scope)).catch(e=>console.warn('SW failed:',e))}
+if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').then(r=>{console.log('SW registered:',r.scope);
+/* Tell new SW to activate immediately */
+if(r.waiting)r.waiting.postMessage({type:'SKIP_WAITING'});
+r.addEventListener('updatefound',()=>{const nw=r.installing;if(nw)nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller)showToast('Update available — refresh to apply')})})
+}).catch(e=>console.warn('SW failed:',e))}
+
+/* --- PWA Install Prompt --- */
+let deferredPrompt=null;
+const installBanner=document.getElementById('installBanner');
+const fabInstall=document.getElementById('fabInstall');
+
+/* Check if already installed (standalone mode) */
+const isStandalone=window.matchMedia('(display-mode:standalone)').matches||window.navigator.standalone===true;
+const installDismissed=localStorage.getItem('rq_install_dismissed');
+
+/* Android/Chrome: capture the beforeinstallprompt event */
+window.addEventListener('beforeinstallprompt',(e)=>{
+e.preventDefault();deferredPrompt=e;
+if(!isStandalone&&!installDismissed){installBanner.classList.add('show')}
+else if(!isStandalone){fabInstall.classList.add('show')}});
+
+/* iOS Safari: detect and show banner with instructions */
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+if(isIOS&&!isStandalone&&!installDismissed){
+setTimeout(()=>{installBanner.classList.add('show');
+document.querySelector('.install-banner-desc').textContent='Tap the Share button, then "Add to Home Screen" for offline access.';
+document.querySelector('.install-banner-actions .btn-primary').textContent='Got it';},1500)}
+
+function installApp(){
+if(deferredPrompt){
+deferredPrompt.prompt();
+deferredPrompt.userChoice.then(r=>{
+if(r.outcome==='accepted'){showToast('RespondIQ installed!');installBanner.classList.remove('show');fabInstall.classList.remove('show');localStorage.setItem('rq_installed','1')}
+deferredPrompt=null})}
+else if(isIOS){showToast('Use Share > Add to Home Screen');installBanner.classList.remove('show');fabInstall.classList.remove('show');localStorage.setItem('rq_install_dismissed','1')}
+else{installBanner.classList.remove('show')}}
+
+function dismissInstall(){
+installBanner.classList.remove('show');
+localStorage.setItem('rq_install_dismissed','1');
+if(deferredPrompt)fabInstall.classList.add('show')}
+
+/* Listen for successful install */
+window.addEventListener('appinstalled',()=>{showToast('RespondIQ installed successfully!');installBanner.classList.remove('show');fabInstall.classList.remove('show');deferredPrompt=null;localStorage.setItem('rq_installed','1')});
 
 /* --- App Init --- */
 (async function init(){
@@ -648,7 +691,9 @@ await initDB();await seedResponders();initMap();
 await refreshUI();setOnlineStatus(navigator.onLine);
 addLogEntry('system','RespondIQ initialized — '+SEED_RESPONDERS.length+' responders loaded');
 addLogEntry('system','Edge AI classifier ready — 7 incident types, multilingual keywords');
-addLogEntry('system','Press "Start Simulation" to begin disaster scenario demo')})();
+addLogEntry('system','Press "Start Simulation" to begin disaster scenario demo');
+/* On mobile, default to map tab */
+if(window.innerWidth<=768){switchTab('map')}})();
 
 </script>
 </body>
