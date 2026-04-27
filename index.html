@@ -308,6 +308,22 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
   </div>
 </div>
 
+<!-- Install Banner -->
+<div class="install-banner" id="installBanner">
+  <div class="install-banner-icon">RQ</div>
+  <div class="install-banner-text">
+    <div class="install-banner-title">Install RespondIQ</div>
+    <div class="install-banner-desc">Works offline. Add to your home screen for instant access.</div>
+  </div>
+  <div class="install-banner-actions">
+    <button class="btn-dismiss" onclick="dismissInstall()">Not now</button>
+    <button class="btn-primary btn-sm" onclick="installApp()">Install</button>
+  </div>
+</div>
+
+<!-- Floating install button (shows after banner dismissed) -->
+<button class="fab-install" id="fabInstall" onclick="installApp()" title="Install RespondIQ">+</button>
+
 <!-- Toast notification -->
 <div class="toast" id="toast"></div>
 
