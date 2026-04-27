@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="description" content="RespondIQ - Offline-first multi-agency disaster coordination system">
+<title>RespondIQ — Disaster Coordination</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3b82f6">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f8f9fb;--bg2:#ffffff;--bg3:#f1f3f5;--bg4:#e5e7eb;--text:#1e293b;--text2:#64748b;--blue:#3b82f6;--red:#ef4444;--orange:#f97316;--yellow:#ca8a04;--green:#16a34a;--purple:#9333ea;--cyan:#0891b2;--border:#d1d5db;--radius:8px}
+html,body{height:100%;overflow:hidden}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.4}
+button{cursor:pointer;font-family:inherit;font-size:13px;border:none;border-radius:var(--radius);padding:6px 12px;transition:all .2s}
+input,select,textarea{font-family:inherit;font-size:13px;background:#fff;color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;outline:none;transition:border .2s}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#f1f3f5}
+::-webkit-scrollbar-thumb{background:#c4c9d1;border-radius:3px}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;gap:12px;padding:8px 16px;background:#fff;border-bottom:1px solid var(--border);height:48px;z-index:1000;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.topbar h1{font-size:18px;font-weight:700;color:var(--blue);white-space:nowrap}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0;transition:background .3s}
+.status-dot.offline{background:var(--red);box-shadow:0 0 8px var(--red)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-red{background:rgba(239,68,68,.1);color:var(--red)}
+.badge-blue{background:rgba(59,130,246,.1);color:var(--blue)}
+.badge-green{background:rgba(22,163,106,.1);color:var(--green)}
+.badge-orange{background:rgba(249,115,22,.1);color:var(--orange)}
+.badge-yellow{background:rgba(202,138,4,.1);color:var(--yellow)}
+.badge-purple{background:rgba(147,51,234,.1);color:var(--purple)}
+.badge-gray{background:rgba(100,116,139,.1);color:var(--text2)}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-outline{background:#fff;border:1px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--blue);color:var(--blue)}
+#clock{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Offline banner */
+.offline-banner{display:none;background:var(--red);color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600}
+.offline-banner.show{display:block}
+
+/* Stats bar */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 16px;background:var(--bg)}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;text-align:center}
+.stat-card .label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.stat-card .value{font-size:22px;font-weight:700;margin-top:2px}
+.stat-card .value.red{color:var(--red)}
+.stat-card .value.blue{color:var(--blue)}
+.stat-card .value.green{color:var(--green)}
+.stat-card .value.cyan{color:var(--cyan)}
+
+/* Main layout */
+.main{display:flex;height:calc(100vh - 48px - 6px);overflow:hidden}
+.main.has-banner{height:calc(100vh - 48px - 33px - 6px)}
+.sidebar-left{width:280px;flex-shrink:0;background:#fff;border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.map-container{flex:1;min-width:0;position:relative}
+#map{width:100%;height:100%;background:#e8ecf1}
+.sidebar-right{width:320px;flex-shrink:0;background:#fff;border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+
+/* Panel sections */
+.panel-header{padding:10px 14px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:2}
+.panel-body{padding:8px;flex:1;overflow-y:auto}
+.panel-section{margin-bottom:12px}
+
+/* Responder cards */
+.responder-card{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border-radius:var(--radius);margin-bottom:6px;border:1px solid var(--border);transition:border-color .2s;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.responder-card:hover{border-color:var(--blue)}
+.responder-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.responder-avatar.medical{background:var(--red)}
+.responder-avatar.fire{background:var(--orange)}
+.responder-avatar.ndrf{background:var(--blue)}
+.responder-avatar.police{background:var(--purple)}
+.responder-info{flex:1;min-width:0}
+.responder-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.responder-meta{font-size:11px;color:var(--text2)}
+.responder-status{font-size:11px;padding:2px 6px;border-radius:8px}
+.responder-status.available{background:rgba(34,197,94,.15);color:var(--green)}
+.responder-status.busy{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* Incident cards */
+.incident-card{padding:10px;background:#fff;border-radius:var(--radius);margin-bottom:6px;border-left:3px solid var(--red);cursor:pointer;transition:all .2s;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.incident-card:hover{background:var(--bg4)}
+.incident-card.severity-high{border-left-color:var(--orange)}
+.incident-card.severity-medium{border-left-color:var(--yellow)}
+.incident-card.resolved{border-left-color:var(--green);opacity:.7}
+.incident-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.incident-type{font-size:12px;font-weight:700}
+.incident-time{font-size:11px;color:var(--text2)}
+.incident-msg{font-size:12px;color:var(--text2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:4px}
+.incident-footer{display:flex;align-items:center;justify-content:space-between;margin-top:6px;font-size:11px}
+
+/* Triage cards */
+.triage-card{padding:10px;background:#fff;border-radius:var(--radius);margin-bottom:6px;border:1px solid var(--border);animation:triageFlash .3s ease;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+@keyframes triageFlash{0%{background:#dbeafe}100%{background:#fff}}
+.triage-msg{font-size:12px;color:var(--text2);margin-bottom:6px}
+.triage-msg .keyword{color:var(--yellow);font-weight:600}
+.triage-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.severity-bar{width:60px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
+.severity-fill{height:100%;border-radius:3px;transition:width .3s}
+
+/* Event log */
+.log-entry{display:flex;gap:8px;padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border)}
+.log-entry:last-child{border-bottom:none}
+.log-time{color:var(--text2);flex-shrink:0;font-variant-numeric:tabular-nums}
+.log-source{flex-shrink:0}
+.log-msg{flex:1;min-width:0;word-break:break-word}
+
+/* Citizen form */
+.citizen-form{padding:10px}
+.citizen-form .form-group{margin-bottom:8px}
+.citizen-form label{display:block;font-size:12px;color:var(--text2);margin-bottom:3px}
+.citizen-form input,.citizen-form select,.citizen-form textarea{width:100%}
+.citizen-form textarea{resize:vertical;min-height:60px}
+.char-counter{font-size:11px;color:var(--text2);text-align:right;margin-top:2px}
+.form-row{display:flex;gap:8px;align-items:flex-end}
+.form-row>*{flex:1}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:#1e293b;color:#fff;padding:10px 20px;border-radius:var(--radius);border:none;font-size:13px;z-index:9999;opacity:0;transition:all .3s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* Pulsing critical marker */
+@keyframes pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.8);opacity:0}100%{transform:scale(1);opacity:0}}
+.critical-pulse{will-change:transform}
+.leaflet-popup-content-wrapper{background:#fff!important;color:var(--text)!important;border-radius:var(--radius)!important;border:1px solid var(--border)!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}
+.leaflet-popup-tip{background:#fff!important}
+.leaflet-popup-content{margin:10px 14px!important;font-size:13px!important}
+.popup-title{font-size:14px;font-weight:700;margin-bottom:8px}
+.popup-row{margin-bottom:4px;font-size:12px;color:var(--text2)}
+.popup-row b{color:var(--text)}
+.popup-btn{margin-top:8px;width:100%}
+
+/* Tabs (mobile) */
+.mobile-tabs{display:none;background:#fff;border-bottom:1px solid var(--border)}
+.mobile-tabs button{flex:1;padding:10px;background:none;color:var(--text2);font-size:13px;font-weight:600;border-bottom:2px solid transparent}
+.mobile-tabs button.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* Collapsible */
+.collapsible-toggle{width:100%;background:var(--bg3);color:var(--text);padding:8px 14px;text-align:left;font-weight:600;font-size:13px;border-radius:0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;box-shadow:none}
+.collapsible-toggle .arrow{transition:transform .2s;font-size:10px}
+.collapsible-toggle.open .arrow{transform:rotate(180deg)}
+.collapsible-body{display:none}
+.collapsible-body.open{display:block}
+
+/* Mobile responsive */
+@media(max-width:768px){
+  .main{flex-direction:column}
+  .sidebar-left,.sidebar-right{width:100%;height:auto;border:none;display:none}
+  .sidebar-left.active,.sidebar-right.active{display:flex}
+  .map-container{height:45vh;flex:none}
+  .map-container.active{display:block}
+  .mobile-tabs{display:flex}
+  .stats-bar{grid-template-columns:repeat(2,1fr);gap:6px;padding:6px 10px}
+  .stat-card .value{font-size:18px}
+  .topbar h1{font-size:15px}
+}
+@media(max-width:480px){
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  .topbar{padding:8px 10px;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<!-- Offline Banner -->
+<div class="offline-banner" id="offlineBanner">OFFLINE MODE — all actions queued locally</div>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <h1>RespondIQ</h1>
+  <div class="status-dot" id="statusDot" title="Online"></div>
+  <span id="statusText" style="font-size:12px;color:var(--text2)">Online</span>
+  <div class="topbar-right">
+    <span id="clock">00:00:00</span>
+    <span class="badge badge-red" id="incidentBadge">0 Active</span>
+    <button class="btn-outline btn-sm" id="toggleOfflineBtn" onclick="toggleOfflineMode()">Toggle Offline</button>
+    <button class="btn-primary btn-sm" id="simBtn" onclick="toggleSimulation()">Start Simulation</button>
+  </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card"><div class="label">Active Incidents</div><div class="value red" id="statActive">0</div></div>
+  <div class="stat-card"><div class="label">Responders Deployed</div><div class="value blue" id="statDeployed">0</div></div>
+  <div class="stat-card"><div class="label">Resolved</div><div class="value green" id="statResolved">0</div></div>
+  <div class="stat-card"><div class="label">Avg Response Time</div><div class="value cyan" id="statAvgTime">—</div></div>
+</div>
+
+<!-- Mobile Tabs -->
+<div class="mobile-tabs" id="mobileTabs">
+  <button class="active" onclick="switchTab('map')">Map</button>
+  <button onclick="switchTab('incidents')">Incidents</button>
+  <button onclick="switchTab('resources')">Resources</button>
+</div>
+
+<!-- Main Layout -->
+<div class="main" id="mainLayout">
+  <!-- Left Sidebar: Resources -->
+  <div class="sidebar-left" id="sidebarLeft">
+    <div class="panel-header">Responders <span class="badge badge-blue" id="responderCount">0</span></div>
+    <div class="panel-body" id="responderList"></div>
+  </div>
+
+  <!-- Center: Map -->
+  <div class="map-container active" id="mapContainer">
+    <div id="map"></div>
+  </div>
+
+  <!-- Right Sidebar: Incidents + Triage + Log + Form -->
+  <div class="sidebar-right" id="sidebarRight">
+    <!-- Incident Queue -->
+    <div class="panel-header">Incidents <span class="badge badge-red" id="incidentQueueCount">0</span></div>
+    <div class="panel-body panel-section" id="incidentList" style="max-height:200px"></div>
+
+    <!-- AI Triage -->
+    <div class="panel-header">AI Triage</div>
+    <div class="panel-body panel-section" id="triagePanel" style="max-height:220px"></div>
+
+    <!-- Event Log / Comms Feed -->
+    <div class="panel-header">Event Log
+      <span style="display:flex;gap:4px">
+        <button class="btn-outline btn-sm" onclick="sendTestSMS()">Send Test SMS</button>
+        <button class="btn-outline btn-sm" onclick="simulateLoRa()">LoRa Packet</button>
+      </span>
+    </div>
+    <div class="panel-body panel-section" id="eventLog" style="max-height:180px"></div>
+
+    <!-- Citizen Request Form -->
+    <button class="collapsible-toggle" onclick="toggleCollapsible(this)">Citizen Request Form <span class="arrow">v</span></button>
+    <div class="collapsible-body" id="citizenFormPanel">
+      <div class="citizen-form">
+        <div class="form-group"><label>Name *</label><input type="text" id="cfName" required placeholder="Full name"></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="cfPhone" pattern="[6-9]\d{9}" placeholder="10 digit mobile"></div>
+        <div class="form-group">
+          <label>Location</label>
+          <div class="form-row">
+            <input type="text" id="cfLocation" placeholder="Address or area">
+            <button class="btn-outline btn-sm" onclick="useGPS()" style="white-space:nowrap">Use GPS</button>
+          </div>
+        </div>
+        <div class="form-group"><label>Need Type *</label>
+          <select id="cfType">
+            <option value="">Select...</option>
+            <option value="medical">Medical Emergency</option>
+            <option value="fire">Fire</option>
+            <option value="flood">Flood</option>
+            <option value="rescue">Trapped / Rescue</option>
+            <option value="relief">Food + Water</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Description *</label><textarea id="cfDesc" maxlength="280" placeholder="Describe the situation..." oninput="updateCharCount()"></textarea><div class="char-counter"><span id="charCount">0</span>/280</div></div>
+        <button class="btn-primary" style="width:100%" onclick="submitCitizenForm()">Submit Request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<!-- PLACEHOLDER: JS will be added next -->
+<script>
+
+/* ===== DB LAYER ===== */
+const DB_NAME='respondiq';const DB_VER=1;let _db=null;
+function initDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains('incidents'))d.createObjectStore('incidents',{keyPath:'id'});if(!d.objectStoreNames.contains('responders'))d.createObjectStore('responders',{keyPath:'id'});if(!d.objectStoreNames.contains('outbox'))d.createObjectStore('outbox',{keyPath:'id',autoIncrement:true});};r.onsuccess=e=>{_db=e.target.result;res(_db)};r.onerror=e=>rej(e.target.error)})}
+function _tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store)}
+function saveIncident(inc){return new Promise((r,j)=>{const req=_tx('incidents','readwrite').put(inc);req.onsuccess=()=>r(inc);req.onerror=e=>j(e)})}
+function getIncidents(){return new Promise((r,j)=>{const req=_tx('incidents').getAll();req.onsuccess=()=>r(req.result);req.onerror=e=>j(e)})}
+function updateIncident(id,changes){return new Promise((r,j)=>{const s=_tx('incidents','readwrite');const g=s.get(id);g.onsuccess=()=>{const obj=Object.assign(g.result||{},changes);s.put(obj);r(obj)};g.onerror=e=>j(e)})}
+function saveResponder(resp){return new Promise((r,j)=>{const req=_tx('responders','readwrite').put(resp);req.onsuccess=()=>r(resp);req.onerror=e=>j(e)})}
+function getResponders(){return new Promise((r,j)=>{const req=_tx('responders').getAll();req.onsuccess=()=>r(req.result);req.onerror=e=>j(e)})}
+function updateResponder(id,changes){return new Promise((r,j)=>{const s=_tx('responders','readwrite');const g=s.get(id);g.onsuccess=()=>{const obj=Object.assign(g.result||{},changes);s.put(obj);r(obj)};g.onerror=e=>j(e)})}
+function addToOutbox(item){return new Promise((r,j)=>{const req=_tx('outbox','readwrite').add(item);req.onsuccess=()=>r();req.onerror=e=>j(e)})}
+function flushOutbox(syncFn){return new Promise((r,j)=>{const s=_db.transaction('outbox','readwrite').objectStore('outbox');const req=s.getAll();req.onsuccess=async()=>{let c=0;for(const item of req.result){try{await syncFn(item);s.delete(item.id);c++}catch(e){}}r(c)};req.onerror=e=>j(e)})}
+
+const SEED_RESPONDERS=[
+{id:'R1',name:'Arjun Singh',agency:'medical',lat:12.9352,lng:77.6245,status:'available',currentIncident:null},
+{id:'R2',name:'Priya Nair',agency:'fire',lat:12.9698,lng:77.7499,status:'available',currentIncident:null},
+{id:'R3',name:'Karan Mehta',agency:'ndrf',lat:12.9121,lng:77.6446,status:'available',currentIncident:null},
+{id:'R4',name:'Sunita Rao',agency:'police',lat:12.9784,lng:77.6408,status:'available',currentIncident:null},
+{id:'R5',name:'Vikram Das',agency:'medical',lat:12.9166,lng:77.6101,status:'available',currentIncident:null},
+{id:'R6',name:'Lakshmi Iyer',agency:'fire',lat:12.9591,lng:77.7007,status:'available',currentIncident:null},
+{id:'R7',name:'Raju Patil',agency:'ndrf',lat:12.9308,lng:77.5833,status:'available',currentIncident:null},
+{id:'R8',name:'Deepa Menon',agency:'police',lat:12.9757,lng:77.6011,status:'available',currentIncident:null}
+];
+async function seedResponders(){const r=await getResponders();if(r.length===0){for(const s of SEED_RESPONDERS)await saveResponder(s)}}
+
+/* ===== EDGE AI CLASSIFIER ===== */
+const KEYWORDS={
+FLOOD:['flood','water','paani','baarish','submerged','drowning','knee deep','waist deep','jal','nadi','barish'],
+FIRE:['fire','aag','burning','smoke','blast','explosion','jalana','dhuan','gas leak'],
+MEDICAL:['injured','hurt','bleeding','unconscious','heart','breathe','hospital','doctor','ambulance','fracture','broken','fell'],
+RESCUE:['trapped','stuck','collapse','debris','building','bachao','help','madad','phanse','girna','rescue'],
+STRUCTURAL:['crack','collapse','wall','roof','building','fallen','tilted','damage','girne'],
+RELIEF:['food','hungry','shelter','medicine','blanket','bhook','khana','ration','water supply','paani supply']
+};
+const AGENCY_MAP={FLOOD:'ndrf',FIRE:'fire',MEDICAL:'medical',RESCUE:'ndrf',STRUCTURAL:'ndrf',RELIEF:'police',UNKNOWN:'police'};
+function classifyMessage(text){
+const t=text.toLowerCase();let best='UNKNOWN',maxScore=0,found=[];
+for(const[type,kws]of Object.entries(KEYWORDS)){let score=0;const hits=[];
+for(const kw of kws){if(t.includes(kw)){score+=kw.split(' ').length;hits.push(kw)}}
+if(score>maxScore){maxScore=score;best=type;found=hits}}
+let sev=1;
+if(best==='UNKNOWN')sev=3;
+else{sev=Math.min(10,Math.max(1,Math.round(maxScore*2+3)));
+if(/critical|emergency|dying|death|bachao|please help|urgently/i.test(t))sev=Math.min(10,sev+2);
+if(/children|baby|elderly|pregnant|disabled/i.test(t))sev=Math.min(10,sev+1)}
+return{type:best,severity:sev,keywords:found,agency:AGENCY_MAP[best]}}
+
+/* ===== RESOURCE ALLOCATION ===== */
+function haversine(lat1,lng1,lat2,lng2){
+const R=6371,toR=Math.PI/180;const dLat=(lat2-lat1)*toR,dLng=(lng2-lng1)*toR;
+const a=Math.sin(dLat/2)**2+Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dLng/2)**2;
+return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
+
+async function assignNearestResponder(incidentId){
+const incidents=await getIncidents();const inc=incidents.find(i=>i.id===incidentId);
+if(!inc||inc.status==='assigned'||inc.status==='resolved')return null;
+const responders=await getResponders();
+let avail=responders.filter(r=>r.status==='available');
+const prefAgency=AGENCY_MAP[inc.type]||'police';
+let preferred=avail.filter(r=>r.agency===prefAgency);
+if(preferred.length===0)preferred=avail;
+if(preferred.length===0)return null;
+let nearest=null,minDist=Infinity;
+for(const r of preferred){const d=haversine(inc.lat,inc.lng,r.lat,r.lng);if(d<minDist){minDist=d;nearest=r}}
+await updateIncident(incidentId,{status:'assigned',assignedResponder:nearest.id});
+await updateResponder(nearest.id,{status:'busy',currentIncident:incidentId});
+if(!isOnline){await addToOutbox({type:'assignment',payload:{incidentId,responderId:nearest.id},timestamp:Date.now()})}
+updateMapAssignment(inc,nearest);
+addLogEntry('system',`Assigned ${nearest.name} (${nearest.agency}) → ${incidentId} | ${minDist.toFixed(1)}km | ETA: ${Math.round(minDist/40*60)}min`);
+await refreshUI();
+return{responder:nearest,distance:minDist,estimatedArrival:Math.round(minDist/40*60)}}
+
+async function resolveIncident(incidentId){
+const inc=(await getIncidents()).find(i=>i.id===incidentId);if(!inc)return;
+await updateIncident(incidentId,{status:'resolved'});
+if(inc.assignedResponder)await updateResponder(inc.assignedResponder,{status:'available',currentIncident:null});
+if(polylines[incidentId]){map.removeLayer(polylines[incidentId]);delete polylines[incidentId]}
+addLogEntry('system',`Incident ${incidentId} resolved`);
+await refreshUI()}
+
+/* ===== MAP LAYER ===== */
+let map,incidentMarkers={},responderMarkers={},polylines={};
+function initMap(){
+map=L.map('map',{zoomAnimation:false,fadeAnimation:false,markerZoomAnimation:false}).setView([12.9716,77.5946],12);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map)}
+
+function getMarkerColor(inc){
+if(inc.status==='resolved')return'#22c55e';
+if(inc.severity>=8)return'#ef4444';
+if(inc.severity>=5)return'#f97316';
+return'#eab308'}
+
+function addIncidentMarker(inc){
+if(incidentMarkers[inc.id])map.removeLayer(incidentMarkers[inc.id]);
+const color=getMarkerColor(inc);
+const opts={radius:inc.severity>=8?10:7,fillColor:color,color:color,weight:2,opacity:1,fillOpacity:0.7};
+const m=L.circleMarker([inc.lat,inc.lng],opts).addTo(map);
+if(inc.severity>=8){const pulse=L.circleMarker([inc.lat,inc.lng],{radius:10,fillColor:color,color:color,weight:1,opacity:0,fillOpacity:0,className:'critical-pulse'}).addTo(map);
+incidentMarkers[inc.id+'_pulse']=pulse}
+m.bindPopup(()=>createPopup(inc),{maxWidth:280});
+m.on('click',async()=>{const fresh=(await getIncidents()).find(i=>i.id===inc.id);if(fresh)m.setPopupContent(createPopup(fresh))});
+incidentMarkers[inc.id]=m}
+
+function createPopup(inc){
+const canAssign=inc.status==='open'?'':'disabled';
+const statusBadge=inc.status==='resolved'?'badge-green':inc.status==='assigned'?'badge-blue':'badge-red';
+return`<div class="popup-title">${inc.id} <span class="badge badge-${inc.type==='FLOOD'?'blue':inc.type==='FIRE'?'orange':inc.type==='MEDICAL'?'red':'yellow'}">${inc.type}</span></div>
+<div class="popup-row"><b>Severity:</b> ${inc.severity}/10</div>
+<div class="popup-row"><b>Message:</b> ${inc.message}</div>
+<div class="popup-row"><b>Citizen:</b> ${inc.citizenName||'Unknown'}</div>
+<div class="popup-row"><b>Source:</b> <span class="badge badge-${inc.source==='lora'?'purple':inc.source==='sms'?'green':'blue'}">${inc.source}</span></div>
+<div class="popup-row"><b>Status:</b> <span class="badge ${statusBadge}">${inc.status}</span></div>
+<div class="popup-row"><b>Responder:</b> ${inc.assignedResponder||'Unassigned'}</div>
+<div class="popup-row"><b>Time:</b> ${new Date(inc.timestamp).toLocaleTimeString()}</div>
+<button class="btn-primary btn-sm popup-btn" onclick="assignNearestResponder('${inc.id}')" ${canAssign}>Assign Nearest Responder</button>
+${inc.status==='assigned'?`<button class="btn-outline btn-sm popup-btn" onclick="resolveIncident('${inc.id}')" style="margin-top:4px">✓ Resolve</button>`:''}`}
+
+function addResponderMarker(r){
+if(responderMarkers[r.id])map.removeLayer(responderMarkers[r.id]);
+const icon=L.divIcon({className:'',html:`<div style="width:28px;height:28px;border-radius:50%;background:#3b82f6;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700">${r.name.charAt(0)}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+const m=L.marker([r.lat,r.lng],{icon}).addTo(map);
+m.bindTooltip(r.name+' ('+r.agency+')',{permanent:false});
+responderMarkers[r.id]=m}
+
+function updateMapAssignment(inc,resp){
+if(polylines[inc.id])map.removeLayer(polylines[inc.id]);
+polylines[inc.id]=L.polyline([[resp.lat,resp.lng],[inc.lat,inc.lng]],{color:'#3b82f6',weight:2,dashArray:'8,6',opacity:0.7}).addTo(map)}
+
+async function refreshMapMarkers(){
+const incs=await getIncidents();for(const inc of incs)addIncidentMarker(inc);
+const resps=await getResponders();for(const r of resps)addResponderMarker(r)}
+
+/* ===== SIMULATOR ===== */
+window._simTimers=[];let simRunning=false;
+function startSimulation(app){
+if(simRunning)return;simRunning=true;
+document.getElementById('simBtn').textContent='Stop';document.getElementById('simBtn').classList.add('btn-danger');document.getElementById('simBtn').classList.remove('btn-primary');
+const t=(ms,fn)=>{const id=setTimeout(fn,ms);window._simTimers.push(id)};
+t(0,()=>app.injectIncident({id:'INC-001',type:'FLOOD',severity:9,message:'Water level rising fast, knee deep in ground floor, 4 people stuck please help',citizenName:'Meera Sharma',phone:'9876543210',lat:12.9352,lng:77.6245,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'}));
+t(2000,()=>app.injectIncident({id:'INC-002',type:'FIRE',severity:8,message:'Aag lag gayi factory mein, smoke everywhere, workers trapped inside',citizenName:'Suresh Kumar',phone:'9876543211',lat:12.9698,lng:77.7499,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'}));
+t(5000,()=>app.injectMessage('sms','My father fell unconscious, need ambulance urgently, near Indiranagar 100ft road','Ravi Nair'));
+t(8000,()=>app.injectIncident({id:'INC-004',type:'RESCUE',severity:9,message:'Building wall collapsed, 3 people under debris, bachao please',citizenName:'Kavya Reddy',phone:'9876543213',lat:12.9121,lng:77.6446,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'}));
+t(10000,()=>app.injectIncident({id:'INC-005',type:'MEDICAL',severity:7,message:'Father fell unconscious, need ambulance urgently',citizenName:'Ravi Nair',phone:'9876543214',lat:12.9784,lng:77.6408,status:'open',assignedResponder:null,timestamp:Date.now(),source:'sms'}));
+t(12000,()=>{addLogEntry('lora','Raw: 464c4f4f44 313220 39372e3535 → Decoded: FLOOD L12 97.55');
+app.injectIncident({id:'INC-006',type:'FLOOD',severity:8,message:'FLOOD alert decoded from LoRa packet — BTM Layout area',citizenName:'LoRa Node #7',phone:'',lat:12.9166,lng:77.6101,status:'open',assignedResponder:null,timestamp:Date.now(),source:'lora'})});
+t(15000,()=>app.injectIncident({id:'INC-007',type:'RELIEF',severity:5,message:'No food or water for 2 days, 8 people in shelter, need madad',citizenName:'Anjali Singh',phone:'9876543216',lat:12.9308,lng:77.5833,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'}));
+t(20000,async()=>{const incs=await getIncidents();const open=incs.filter(i=>i.status==='open').sort((a,b)=>a.timestamp-b.timestamp);
+if(open[0])await app.autoAssign(open[0].id);if(open[1])await app.autoAssign(open[1].id)});
+t(25000,async()=>{const incs=await getIncidents();const open=incs.filter(i=>i.status==='open').sort((a,b)=>a.timestamp-b.timestamp);
+if(open[0])await app.autoAssign(open[0].id);if(open[1])await app.autoAssign(open[1].id)});
+t(30000,async()=>{await resolveIncident('INC-001');addLogEntry('system','Incident INC-001 resolved by Arjun Singh — Koramangala flood contained')});
+t(45000,()=>{app.triggerOffline();
+app.injectIncident({id:'INC-OFF1',type:'MEDICAL',severity:6,message:'Child has high fever, need doctor, offline area',citizenName:'Offline Citizen',phone:'',lat:12.96,lng:77.59,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'})});
+t(60000,()=>app.triggerOnline());
+t(75000,async()=>{const incs=await getIncidents();const open=incs.filter(i=>i.status==='open');
+for(const i of open)await app.autoAssign(i.id);
+addLogEntry('system','All remaining incidents auto-assigned');simRunning=false;
+document.getElementById('simBtn').textContent='Start Simulation';document.getElementById('simBtn').classList.remove('btn-danger');document.getElementById('simBtn').classList.add('btn-primary')})}
+
+function stopSimulation(){window._simTimers.forEach(id=>clearTimeout(id));window._simTimers=[];simRunning=false;
+document.getElementById('simBtn').textContent='Start Simulation';document.getElementById('simBtn').classList.remove('btn-danger');document.getElementById('simBtn').classList.add('btn-primary')}
+
+/* ===== UI + APP INIT ===== */
+let isOnline=navigator.onLine;let logEntries=[];let triageEntries=[];let responseTimes=[];
+
+/* --- Clock --- */
+function updateClock(){const n=new Date();document.getElementById('clock').textContent=n.toLocaleTimeString()}
+setInterval(updateClock,1000);updateClock();
+
+/* --- Toast --- */
+function showToast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)}
+
+/* --- Event Log --- */
+function addLogEntry(source,msg){
+const now=new Date().toLocaleTimeString();
+const colors={lora:'badge-purple',sms:'badge-green',manual:'badge-blue',system:'badge-gray'};
+logEntries.unshift({source,msg,time:now});
+if(logEntries.length>100)logEntries.splice(100);
+const el=document.getElementById('eventLog');
+const div=document.createElement('div');div.className='log-entry';
+div.innerHTML=`<span class="log-time">${now}</span><span class="badge ${colors[source]||'badge-gray'} log-source">${source.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
+el.prepend(div);if(el.children.length>100)el.removeChild(el.lastChild)}
+
+/* --- Triage Panel --- */
+function addTriageEntry(text,result){
+triageEntries.unshift({text,result});if(triageEntries.length>10)triageEntries.splice(10);
+const el=document.getElementById('triagePanel');
+const highlighted=text.replace(new RegExp('('+result.keywords.join('|')+')','gi'),'<span class="keyword">$1</span>');
+const sevColor=result.severity>=8?'var(--red)':result.severity>=5?'var(--orange)':'var(--yellow)';
+const div=document.createElement('div');div.className='triage-card';
+div.innerHTML=`<div class="triage-msg">${highlighted}</div>
+<div class="triage-row"><span class="badge badge-${result.type==='FLOOD'?'blue':result.type==='FIRE'?'orange':result.type==='MEDICAL'?'red':'yellow'}">${result.type}</span>
+<span class="severity-bar"><span class="severity-fill" style="width:${result.severity*10}%;background:${sevColor}"></span></span>
+<span style="font-size:11px;color:${sevColor}">${result.severity}/10</span>
+<span class="badge badge-${result.agency==='ndrf'?'blue':result.agency==='fire'?'orange':result.agency==='medical'?'red':'purple'}">${result.agency.toUpperCase()}</span></div>`;
+el.prepend(div);if(el.children.length>10)el.removeChild(el.lastChild)}
+
+/* --- Refresh UI --- */
+async function refreshUI(){
+const incs=await getIncidents();const resps=await getResponders();
+const active=incs.filter(i=>i.status!=='resolved');const assigned=incs.filter(i=>i.status==='assigned');const resolved=incs.filter(i=>i.status==='resolved');
+const deployed=resps.filter(r=>r.status==='busy');
+document.getElementById('statActive').textContent=active.length;
+document.getElementById('statDeployed').textContent=deployed.length;
+document.getElementById('statResolved').textContent=resolved.length;
+document.getElementById('incidentBadge').textContent=active.length+' Active';
+document.getElementById('incidentQueueCount').textContent=active.length;
+document.getElementById('responderCount').textContent=resps.length;
+if(responseTimes.length>0){const avg=responseTimes.reduce((a,b)=>a+b,0)/responseTimes.length;document.getElementById('statAvgTime').textContent=avg.toFixed(1)+'m'}
+renderIncidentList(incs);renderResponderList(resps);await refreshMapMarkers()}
+
+function renderIncidentList(incs){
+const el=document.getElementById('incidentList');el.innerHTML='';
+const sorted=[...incs].sort((a,b)=>b.timestamp-a.timestamp);
+for(const inc of sorted){const cls=inc.status==='resolved'?'resolved':inc.severity>=8?'':'severity-'+(inc.severity>=5?'high':'medium');
+const card=document.createElement('div');card.className='incident-card '+cls;
+card.onclick=()=>{if(incidentMarkers[inc.id]){map.setView([inc.lat,inc.lng],14);incidentMarkers[inc.id].openPopup()}};
+card.innerHTML=`<div class="incident-header"><span class="incident-type">${inc.id}</span><span class="badge badge-${inc.type==='FLOOD'?'blue':inc.type==='FIRE'?'orange':inc.type==='MEDICAL'?'red':'yellow'}">${inc.type}</span></div>
+<div class="incident-msg">${inc.message}</div>
+<div class="incident-footer"><span class="badge ${inc.status==='resolved'?'badge-green':inc.status==='assigned'?'badge-blue':'badge-red'}">${inc.status}</span><span class="incident-time">${new Date(inc.timestamp).toLocaleTimeString()}</span></div>`;
+el.appendChild(card)}}
+
+function renderResponderList(resps){
+const el=document.getElementById('responderList');el.innerHTML='';
+for(const r of resps){const card=document.createElement('div');card.className='responder-card';
+card.innerHTML=`<div class="responder-avatar ${r.agency}">${r.name.charAt(0)}</div>
+<div class="responder-info"><div class="responder-name">${r.name}</div><div class="responder-meta">${r.agency.toUpperCase()}${r.currentIncident?' • '+r.currentIncident:''}</div></div>
+<span class="responder-status ${r.status}">${r.status}</span>`;
+el.appendChild(card)}}
+
+/* --- Online/Offline --- */
+function setOnlineStatus(online){
+isOnline=online;const dot=document.getElementById('statusDot');const txt=document.getElementById('statusText');const ban=document.getElementById('offlineBanner');
+dot.className='status-dot'+(online?'':' offline');txt.textContent=online?'Online':'Offline';
+ban.classList.toggle('show',!online);
+document.getElementById('mainLayout').classList.toggle('has-banner',!online)}
+
+function toggleOfflineMode(){
+isOnline=!isOnline;setOnlineStatus(isOnline);
+addLogEntry('system',isOnline?'Network restored':'Network disconnected — offline mode');
+if(isOnline){flushOutbox(item=>{console.log('synced:',JSON.stringify(item));return Promise.resolve()}).then(c=>{if(c>0)showToast('Connected — '+c+' queued updates synced')})}}
+
+window.addEventListener('online',()=>{setOnlineStatus(true);
+flushOutbox(item=>{console.log('synced:',JSON.stringify(item));return Promise.resolve()}).then(c=>{if(c>0)showToast('Connected — '+c+' queued updates synced')})});
+window.addEventListener('offline',()=>setOnlineStatus(false));
+
+/* --- Mobile Tabs --- */
+function switchTab(tab){
+document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.remove('active'));
+document.getElementById('mapContainer').classList.remove('active');
+document.getElementById('sidebarLeft').classList.remove('active');
+document.getElementById('sidebarRight').classList.remove('active');
+if(tab==='map'){document.getElementById('mapContainer').classList.add('active');document.querySelectorAll('.mobile-tabs button')[0].classList.add('active');setTimeout(()=>map.invalidateSize(),100)}
+else if(tab==='resources'){document.getElementById('sidebarLeft').classList.add('active');document.querySelectorAll('.mobile-tabs button')[2].classList.add('active')}
+else{document.getElementById('sidebarRight').classList.add('active');document.querySelectorAll('.mobile-tabs button')[1].classList.add('active')}}
+
+/* --- Collapsible --- */
+function toggleCollapsible(btn){btn.classList.toggle('open');document.getElementById('citizenFormPanel').classList.toggle('open')}
+
+/* --- Citizen Form --- */
+function updateCharCount(){document.getElementById('charCount').textContent=document.getElementById('cfDesc').value.length}
+let cfLat=12.9716,cfLng=77.5946;
+function useGPS(){if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{cfLat=p.coords.latitude;cfLng=p.coords.longitude;document.getElementById('cfLocation').value=cfLat.toFixed(4)+', '+cfLng.toFixed(4);showToast('GPS location acquired')},()=>showToast('GPS failed — using default'))}else showToast('GPS not available')}
+
+async function submitCitizenForm(){
+const name=document.getElementById('cfName').value.trim();const desc=document.getElementById('cfDesc').value.trim();const type=document.getElementById('cfType').value;
+if(!name||!desc){showToast('Please fill required fields');return}
+const result=classifyMessage(desc);
+const inc={id:'INC-'+Date.now(),type:result.type,severity:result.severity,message:desc,citizenName:name,phone:document.getElementById('cfPhone').value,lat:cfLat+(Math.random()-.5)*.01,lng:cfLng+(Math.random()-.5)*.01,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'};
+await saveIncident(inc);
+if(!isOnline){await addToOutbox({type:'citizen_request',payload:inc,timestamp:Date.now()});showToast('Request queued — will sync when connected. ID: '+inc.id)}
+else showToast('Request received — ID: '+inc.id);
+addTriageEntry(desc,result);addLogEntry('manual','Citizen request from '+name+': '+inc.id);
+addIncidentMarker(inc);await refreshUI();
+document.getElementById('cfName').value='';document.getElementById('cfPhone').value='';document.getElementById('cfDesc').value='';document.getElementById('cfType').value='';document.getElementById('charCount').textContent='0'}
+
+/* --- SMS / LoRa Test --- */
+const SMS_MSGS=['Paani aa gaya ghar mein, first floor tak water, 6 log phanse hain','Aag lagi hai building mein, 3rd floor, smoke bahut hai, help karo','My mother is unconscious not breathing, need ambulance Koramangala','Wall girne wali hai, cracks aa gaye hain, bachao please','No food for children since yesterday, need help Jayanagar shelter','Flood water entered shop, goods damaged, need rescue boats','Man fell from construction site, leg broken, bleeding, need help','Gas leak ho raha hai, smell aa rahi hai, kya karein'];
+
+async function sendTestSMS(){
+const msg=SMS_MSGS[Math.floor(Math.random()*SMS_MSGS.length)];
+const result=classifyMessage(msg);
+const phone='+91 98'+Math.floor(Math.random()*900+100)+'XX XXXXX';
+addLogEntry('sms',phone+': '+msg);addTriageEntry(msg,result);
+const inc={id:'INC-SMS'+Date.now(),type:result.type,severity:result.severity,message:msg,citizenName:'SMS Citizen',phone:phone,lat:12.95+(Math.random()-.5)*.05,lng:77.6+(Math.random()-.5)*.05,status:'open',assignedResponder:null,timestamp:Date.now(),source:'sms'};
+await saveIncident(inc);addIncidentMarker(inc);await refreshUI();showToast('Test SMS injected')}
+
+async function simulateLoRa(){
+const hex='464c4f4f44 313220 39372e3535';const decoded='FLOOD L12 97.55';
+addLogEntry('lora','Raw hex: '+hex);
+setTimeout(()=>addLogEntry('lora','Decoding: '+hex+' → ASCII → '+decoded),500);
+setTimeout(async()=>{const result=classifyMessage('FLOOD alert area 12');
+addTriageEntry('LoRa decoded: '+decoded,result);
+const inc={id:'INC-LORA'+Date.now(),type:'FLOOD',severity:7,message:'LoRa decoded: '+decoded,citizenName:'LoRa Node',phone:'',lat:12.92+(Math.random()-.5)*.02,lng:77.61+(Math.random()-.5)*.02,status:'open',assignedResponder:null,timestamp:Date.now(),source:'lora'};
+await saveIncident(inc);addIncidentMarker(inc);await refreshUI();showToast('LoRa packet decoded and triaged')},1200)}
+
+/* --- Simulation Toggle --- */
+function toggleSimulation(){
+if(simRunning){stopSimulation();return}
+const app={
+injectIncident:async(inc)=>{await saveIncident(inc);const r=classifyMessage(inc.message);addTriageEntry(inc.message,r);addIncidentMarker(inc);addLogEntry(inc.source||'system','New incident: '+inc.id+' — '+inc.type);await refreshUI()},
+injectMessage:async(src,text,name)=>{const r=classifyMessage(text);addTriageEntry(text,r);addLogEntry(src,name+': '+text);
+const inc={id:'INC-'+Date.now(),type:r.type,severity:r.severity,message:text,citizenName:name,phone:'',lat:12.9784,lng:77.6408,status:'open',assignedResponder:null,timestamp:Date.now(),source:src};
+await saveIncident(inc);addIncidentMarker(inc);await refreshUI()},
+triggerOffline:()=>{setOnlineStatus(false);addLogEntry('system','Network failure detected — switching to offline mode')},
+triggerOnline:()=>{setOnlineStatus(true);addLogEntry('system','Network restored');flushOutbox(i=>{console.log('synced:',JSON.stringify(i));return Promise.resolve()}).then(c=>showToast('Connected — '+c+' queued updates synced'))},
+autoAssign:async(id)=>assignNearestResponder(id)};
+startSimulation(app)}
+
+/* --- Service Worker Registration --- */
+if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').then(r=>console.log('SW registered:',r.scope)).catch(e=>console.warn('SW failed:',e))}
+
+/* --- App Init --- */
+(async function init(){
+await initDB();await seedResponders();initMap();
+await refreshUI();setOnlineStatus(navigator.onLine);
+addLogEntry('system','RespondIQ initialized — '+SEED_RESPONDERS.length+' responders loaded');
+addLogEntry('system','Edge AI classifier ready — 7 incident types, multilingual keywords');
+addLogEntry('system','Press "Start Simulation" to begin disaster scenario demo')})();
+
+</script>
+</body>
+</html>
