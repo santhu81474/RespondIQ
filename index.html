@@ -329,6 +329,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
       <div class="citizen-form">
         <div class="form-group"><label>Name *</label><input type="text" id="cfName" required placeholder="Full name"></div>
         <div class="form-group"><label>Phone</label><input type="tel" id="cfPhone" pattern="[6-9]\d{9}" placeholder="10 digit mobile"></div>
+        <div class="form-group"><label>Aadhaar No. (for e-RUPI)</label><input type="text" id="cfAadhaar" pattern="\\d{4}" maxlength="4" placeholder="Last 4 digits (optional)"></div>
         <div class="form-group">
           <label>Location</label>
           <div class="form-row">
@@ -408,6 +409,29 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue)}
 
 <!-- Toast notification -->
 <div class="toast" id="toast"></div>
+
+<!-- e-RUPI Modal -->
+<div id="eRupiOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999"></div>
+<div id="eRupiModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;padding:20px;width:90%;max-width:320px;z-index:10000;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+  <h3 style="margin:0 0 16px 0;display:flex;align-items:center;gap:8px">💸 Issue e-RUPI Voucher</h3>
+  <input type="hidden" id="eRupiIncidentId">
+  <div class="form-group">
+    <label>Citizen Aadhaar (Verify)</label>
+    <input type="text" id="eRupiAadhaar" readonly style="background:var(--bg3);color:var(--text2)">
+  </div>
+  <div class="form-group">
+    <label>Voucher Purpose & Amount *</label>
+    <select id="eRupiPurpose">
+      <option value="MEDICAL">🏥 Medical (₹2,000)</option>
+      <option value="SHELTER">🏠 Shelter/Rebuild (₹5,000)</option>
+      <option value="FOOD">🍞 Food & Water (₹1,000)</option>
+    </select>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:20px">
+    <button class="btn-outline" style="flex:1" onclick="closeERupiModal()">Cancel</button>
+    <button class="btn-primary" style="flex:1" onclick="generateERupi()">Generate</button>
+  </div>
+</div>
 
 <!-- PLACEHOLDER: JS will be added next -->
 <script>
@@ -518,6 +542,7 @@ incidentMarkers[inc.id]=m}
 function createPopup(inc){
 const canAssign=inc.status==='open'?'':'disabled';
 const statusBadge=inc.status==='resolved'?'badge-green':inc.status==='assigned'?'badge-blue':'badge-red';
+const eRupiBtn=!inc.eRupiIssued?`<button class="btn-outline btn-sm popup-btn" onclick="openERupiModal('${inc.id}', '${inc.aadhaar||'Not provided'}')" style="margin-top:4px;border-color:var(--green);color:var(--green)">💸 Issue e-RUPI Relief</button>`:`<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:bold;text-align:center">✓ ₹${inc.eRupiAmount} e-RUPI Issued</div>`;
 return`<div class="popup-title">${inc.id} <span class="badge badge-${inc.type==='FLOOD'?'blue':inc.type==='FIRE'?'orange':inc.type==='MEDICAL'?'red':'yellow'}">${inc.type}</span></div>
 <div class="popup-row"><b>Severity:</b> ${inc.severity}/10</div>
 <div class="popup-row"><b>Message:</b> ${inc.message}</div>
@@ -527,7 +552,8 @@ return`<div class="popup-title">${inc.id} <span class="badge badge-${inc.type===
 <div class="popup-row"><b>Responder:</b> ${inc.assignedResponder||'Unassigned'}</div>
 <div class="popup-row"><b>Time:</b> ${new Date(inc.timestamp).toLocaleTimeString()}</div>
 <button class="btn-primary btn-sm popup-btn" onclick="assignNearestResponder('${inc.id}')" ${canAssign}>Assign Nearest Responder</button>
-${inc.status==='assigned'?`<button class="btn-outline btn-sm popup-btn" onclick="resolveIncident('${inc.id}')" style="margin-top:4px">✓ Resolve</button>`:''}`}
+${inc.status==='assigned'?`<button class="btn-outline btn-sm popup-btn" onclick="resolveIncident('${inc.id}')" style="margin-top:4px">✓ Resolve</button>`:''}
+${eRupiBtn}`}
 
 function addResponderMarker(r){
 if(responderMarkers[r.id])map.removeLayer(responderMarkers[r.id]);
@@ -762,7 +788,7 @@ async function submitCitizenForm(){
 const name=document.getElementById('cfName').value.trim();const desc=document.getElementById('cfDesc').value.trim();const type=document.getElementById('cfType').value;
 if(!name||!desc){showToast('Please fill required fields');return}
 const result=classifyMessage(desc);
-const inc={id:'CIT-'+Date.now(),type:result.type,severity:result.severity,message:desc,citizenName:name,phone:document.getElementById('cfPhone').value,lat:cfLat+(Math.random()-.5)*.01,lng:cfLng+(Math.random()-.5)*.01,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'};
+const inc={id:'CIT-'+Date.now(),type:result.type,severity:result.severity,message:desc,citizenName:name,phone:document.getElementById('cfPhone').value,aadhaar:document.getElementById('cfAadhaar').value,lat:cfLat+(Math.random()-.5)*.01,lng:cfLng+(Math.random()-.5)*.01,status:'open',assignedResponder:null,timestamp:Date.now(),source:'manual'};
 await saveIncident(inc);
 if(!isOnline){await addToOutbox({type:'citizen_request',payload:inc,timestamp:Date.now()})}
 showSuccessModal(inc.id, 'Request Submitted');
@@ -770,7 +796,42 @@ document.getElementById('cfName').value='';document.getElementById('cfDesc').val
 
 addTriageEntry(desc,result);addLogEntry('manual','Citizen request from '+name+': '+inc.id);
 addIncidentMarker(inc);await refreshUI();
-document.getElementById('cfName').value='';document.getElementById('cfPhone').value='';document.getElementById('cfDesc').value='';document.getElementById('cfType').value='';document.getElementById('charCount').textContent='0'}
+document.getElementById('cfName').value='';document.getElementById('cfPhone').value='';document.getElementById('cfAadhaar').value='';document.getElementById('cfDesc').value='';document.getElementById('cfType').value='';document.getElementById('charCount').textContent='0'}
+
+/* --- e-RUPI Logic --- */
+function openERupiModal(id, aadhaar){
+  document.getElementById('eRupiIncidentId').value = id;
+  document.getElementById('eRupiAadhaar').value = aadhaar;
+  document.getElementById('eRupiOverlay').style.display = 'block';
+  document.getElementById('eRupiModal').style.display = 'block';
+}
+function closeERupiModal(){
+  document.getElementById('eRupiOverlay').style.display = 'none';
+  document.getElementById('eRupiModal').style.display = 'none';
+}
+async function generateERupi(){
+  const id = document.getElementById('eRupiIncidentId').value;
+  const purpose = document.getElementById('eRupiPurpose').value;
+  let amt = purpose==='MEDICAL'?2000:purpose==='SHELTER'?5000:1000;
+  
+  await updateIncident(id, {eRupiIssued: true, eRupiAmount: amt});
+  closeERupiModal();
+  
+  if(!isOnline){
+    await addToOutbox({type:'erupi_issue',payload:{id, purpose, amt},timestamp:Date.now()});
+    showToast(`e-RUPI queued offline for ${id}`);
+  } else {
+    showToast(`e-RUPI SMS voucher sent for ${id}`);
+  }
+  
+  addLogEntry('system', `Generated ₹${amt} ${purpose} e-RUPI voucher for ${id}`);
+  await refreshUI();
+  
+  if(incidentMarkers[id] && incidentMarkers[id].isPopupOpen()){
+      const fresh=(await getIncidents()).find(i=>i.id===id);
+      if(fresh) incidentMarkers[id].setPopupContent(createPopup(fresh));
+  }
+}
 
 /* --- SMS / LoRa Test --- */
 const SMS_MSGS=['Paani aa gaya ghar mein, first floor tak water, 6 log phanse hain','Aag lagi hai building mein, 3rd floor, smoke bahut hai, help karo','My mother is unconscious not breathing, need ambulance Koramangala','Wall girne wali hai, cracks aa gaye hain, bachao please','No food for children since yesterday, need help Jayanagar shelter','Flood water entered shop, goods damaged, need rescue boats','Man fell from construction site, leg broken, bleeding, need help','Gas leak ho raha hai, smell aa rahi hai, kya karein'];
